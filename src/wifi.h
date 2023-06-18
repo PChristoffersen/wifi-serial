@@ -4,4 +4,5 @@
 
 void wifi_init();
 
-void register_wifi(void);
+bool wifi_join(const char *ssid, const char *password, uint timeout_ms);
+bool wifi_restore();

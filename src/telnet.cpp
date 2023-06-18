@@ -66,38 +66,6 @@ static constexpr uint8_t TELNET_OPT_ENVIRONMENT         = 0x27;
 
 
 
-/*
-Putty:
-I (572261) telnet: Client WILL unknown 1f
-I (572262) telnet: Client WILL unknown 20
-I (572267) telnet: Client WILL unknown 18
-I (572272) telnet: Client WILL unknown 27
-I (572277) telnet: Server DO ECHO
-I (572281) telnet: Client WILL unknown 03
-I (572285) telnet: Server DO suppress GA
-
-
-
-Linux TELNET
-I (74006) telnet: Server DO suppress GA
-I (74007) telnet: Client WILL unknown 18
-I (74011) telnet: Client WILL unknown 1f
-I (74016) telnet: Client WILL unknown 20
-I (74020) telnet: Client WILL unknown 21
-I (74025) telnet: Client WILL unknown 22
-I (74030) telnet: Client WILL unknown 27
-I (74034) telnet: Server WON'T DO STATUS
-I (74039) telnet: Client WILL unknown 23
-I (74043) telnet: Server DO ECHO
-
-
-
-
-
-
-*/
-
-
 bool TelnetServer::start() 
 {
     int addr_family = AF_INET;

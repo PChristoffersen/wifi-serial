@@ -23,6 +23,8 @@ class Serial {
 
         int fd() const { return m_fd; }
 
+        bool set_baud(uint32_t baud);
+
     private:
         const uart_port_t m_port;
         const gpio_num_t m_tx_pin;

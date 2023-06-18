@@ -89,7 +89,7 @@ static void on_telnet_connection()
 
 
 
-static void nvs_init() 
+static void board_init() 
 {
     // Initialize NVS
     esp_err_t ret = nvs_flash_init();
@@ -98,14 +98,17 @@ static void nvs_init()
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK( ret );
+
+    esp_vfs_dev_uart_register();
+
 }
+
 
 
 void app_main(void)
 {
-    nvs_init();
+    board_init();
     wifi_init();
-    esp_vfs_dev_uart_register();
 
 
     // Start delay...
@@ -114,6 +117,20 @@ void app_main(void)
         ESP_LOGI(TAG, "Starting in %u sec ...", START_DELAY-i);
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
+
+    ESP_LOGI(TAG, "Iterating through app partitions...");
+    auto first = esp_partition_find_first(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, nullptr);
+    auto it = esp_partition_find(first->type, first->subtype, first->label);
+
+    // Loop through all matching partitions, in this case, all with the type 'data' until partition with desired
+    // label is found. Verify if its the same instance as the one found before.
+    for (; it != NULL; it = esp_partition_next(it)) {
+        const esp_partition_t *part = esp_partition_get(it);
+        ESP_LOGI(TAG, "\tfound partition '%s' at offset 0x%lx with size 0x%lx", part->label, part->address, part->size);
+    }
+    // Release the partition iterator to release memory allocated for it
+    esp_partition_iterator_release(it);
+
 
     console_init();
 

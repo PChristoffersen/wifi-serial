@@ -13,7 +13,7 @@
 #include <linenoise/linenoise.h>
 
 #include "cmd_system.h"
-#include "wifi.h"
+#include "cmd.h"
 
 #define PROMPT_STR CONFIG_IDF_TARGET
 
@@ -29,7 +29,7 @@ void console_init()
     /* Register commands */
     esp_console_register_help_command();
     register_system();
-    register_wifi();
+    register_cmd();
 
     static esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
     /* Prompt to be printed before each line.

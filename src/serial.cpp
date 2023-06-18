@@ -11,12 +11,16 @@
 #include <esp_vfs_dev.h>
 #include <driver/uart.h>
 #include <driver/gpio.h>
+#include <nvs.h>
+
 
 static constexpr const char* TAG = "serial";
 
 static constexpr int         SERIAL_RX_BUF_SIZE { 1024 };
 static constexpr int         SERIAL_DEFAULT_BAUD_RATE { 1500000 };
 
+static constexpr const char *SERIAL_NVS_NAMESPACE { "storage" };
+static constexpr const char *SERIAL_NVS_BAUD      { "serial_baud" };
 
 bool Serial::start()
 {
@@ -35,7 +39,25 @@ bool Serial::start()
         .source_clk = UART_SCLK_DEFAULT,
     };
 
-    // TODO set baud rate from NVS
+    nvs_handle_t handle;
+    auto err = nvs_open(SERIAL_NVS_NAMESPACE, NVS_READONLY, &handle);
+    if (err != ESP_OK) {
+        printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+    } else {
+        printf("NVS Open\n");
+
+        uint32_t value = SERIAL_DEFAULT_BAUD_RATE;
+        if (nvs_get_u32(handle, SERIAL_NVS_BAUD, &value)==ESP_OK) {
+            uart_config.baud_rate = value;
+        }
+        else {
+            ESP_LOGI(TAG, "Using default baud %u", SERIAL_DEFAULT_BAUD_RATE);
+        }
+
+        nvs_close(handle);
+    }
+
+
 
     ESP_ERROR_CHECK(uart_param_config(m_port, &uart_config));
     ESP_ERROR_CHECK(uart_set_pin(m_port, m_tx_pin, m_rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
@@ -90,3 +112,32 @@ bool Serial::write(const uint8_t *buf, size_t count)
     return true;
 }
 
+
+bool Serial::set_baud(uint32_t baud)
+{
+    auto res = uart_set_baudrate(m_port, baud);
+    if (res==ESP_OK) {
+        nvs_handle_t handle;
+        res = nvs_open(SERIAL_NVS_NAMESPACE, NVS_READWRITE, &handle);
+        if (res != ESP_OK) {
+            ESP_LOGE(TAG, "Error opening NVS store: err=%d", res);
+            return false;
+        }
+
+        res = nvs_set_u32(handle, SERIAL_NVS_BAUD, baud);
+        if (res!=ESP_OK) {
+            ESP_LOGE(TAG, "Error storing NVS baud: err=%d", res);
+            nvs_close(handle);
+            return false;
+        }
+
+        ESP_LOGI(TAG, "Baud rate set to %lu", baud);
+        nvs_close(handle);
+
+        return true;
+    }
+    else {
+        ESP_LOGE(TAG, "Error setting baud rate to %lu: err=%d", baud, res);
+        return false;
+    }
+}

@@ -14,6 +14,8 @@
 
 #include "serial.h"
 
+//#define DUMP_INPUT
+//#define DUMP_OUTPUT
 
 static constexpr const char* TAG = "telnet";
 
@@ -239,7 +241,7 @@ bool TelnetConnection::write(const uint8_t *buf, size_t count)
         olen++;
         count--;
     }
-    #if 0
+    #if DUMP_OUTPUT
     printf("> ");
     for (int i=0; i<olen; i++) {
         printf("%02x ", buffer[i]);
@@ -296,13 +298,13 @@ bool TelnetConnection::write_subnegotiation(const uint8_t *data, size_t len)
 void TelnetConnection::process_window_size(const uint8_t *data, size_t len)
 {
     if (len!=5) {
-        ESP_LOGW(TAG, "Invalid window size subneg");
+        ESP_LOGW(TAG, "< Client invalid window size");
         return;
     }
     uint16_t width = (static_cast<uint16_t>(data[1]) << 8) | data[2];
     uint16_t height = (static_cast<uint16_t>(data[3]) << 8) | data[4];
 
-    ESP_LOGI(TAG, "Client window size: %u x %u", width, height);
+    ESP_LOGI(TAG, "< Client window size: %u x %u", width, height);
     if (m_window_size_cb) {
         m_window_size_cb(width, height);
     }
@@ -312,13 +314,13 @@ void TelnetConnection::process_window_size(const uint8_t *data, size_t len)
 void TelnetConnection::process_terminal_type(const uint8_t *data, size_t len)
 {
     if (len<3 || data[1]!=0x00) {
-        ESP_LOGW(TAG, "Invalid terminal type");
+        ESP_LOGW(TAG, "< Client Invalid terminal type");
         return;
     }
     char term[len];
     memcpy(term, data+2, len-2);
     term[len] = '\0';
-    ESP_LOGI(TAG, "Client terminal: %s", term);
+    ESP_LOGI(TAG, "< Client terminal: %s", term);
     if (m_terminal_cb) {
         m_terminal_cb(term);
     }
@@ -353,24 +355,27 @@ void TelnetConnection::process_do_command(uint8_t value)
 {
     switch (value) {
         case TELNET_OPT_ECHO: 
-            ESP_LOGI(TAG, "Server DO ECHO");
+            ESP_LOGI(TAG, "< Client DO ECHO");
+            ESP_LOGI(TAG, "> Server WILL ECHO");
             write_command(TELNET_WILL, TELNET_OPT_ECHO);
             break;
         case TELNET_OPT_SUPPRESS_GO_AHEAD:
-            ESP_LOGI(TAG, "Server DO suppress GA");
+            ESP_LOGI(TAG, "< Client DO suppress GA");
+            ESP_LOGI(TAG, "> Server WILL suppress GA");
             write_command(TELNET_WILL, TELNET_OPT_SUPPRESS_GO_AHEAD);
             break;
         case TELNET_OPT_STATUS:
-            ESP_LOGI(TAG, "Server WON'T DO Status");
+            ESP_LOGI(TAG, "< Client DO status");
+            ESP_LOGI(TAG, "> Server WON'T DO Status");
             write_command(TELNET_WONT, TELNET_OPT_STATUS);
             break;
         case TELNET_OPT_TUID:
-            ESP_LOGI(TAG, "Server WON'T DO TUID");
+            ESP_LOGI(TAG, "< Client DO TUID");
+            ESP_LOGI(TAG, "> Server WON'T DO TUID");
             write_command(TELNET_WONT, TELNET_OPT_TUID);
             break;
         default: 
-            ESP_LOGI(TAG, "Server WON'T DO unknown %02x", value);
-            write_command(TELNET_WONT, value);
+            ESP_LOGI(TAG, "< Client DO unknown %02x", value);
             break;
     }
 }
@@ -380,40 +385,43 @@ void TelnetConnection::process_will_command(uint8_t value)
 {
     switch (value) {
         case TELNET_OPT_SUPPRESS_GO_AHEAD:
-            ESP_LOGI(TAG, "Client WILL suppress GA");
+            ESP_LOGI(TAG, "< Client WILL suppress GA");
+            ESP_LOGI(TAG, "> Server DO suppress GA");
             write_command(TELNET_DO, TELNET_OPT_SUPPRESS_GO_AHEAD);
             break;
         case TELNET_OPT_TERMINAL_TYPE: 
-            ESP_LOGI(TAG, "Client WILL Terminal type");
+            ESP_LOGI(TAG, "< Client WILL Terminal type");
             if (m_terminal_cb) {
+                ESP_LOGI(TAG, "> Server get terminal type");
                 uint8_t cmd[] { TELNET_OPT_TERMINAL_TYPE, 1 };
                 write_subnegotiation(cmd, sizeof(cmd));
             }
             break;
         case TELNET_OPT_TERMINAL_SPEED:
-            ESP_LOGI(TAG, "Client WILL Terminal speed");
+            ESP_LOGI(TAG, "< Client WILL Terminal speed");
             break;
         case TELNET_OPT_REMOTE_FLOW_CONTROL:
-            ESP_LOGI(TAG, "Client WILL Remote flow control");
+            ESP_LOGI(TAG, "< Client WILL Remote flow control");
             break;
         case TELNET_OPT_TERMINAL_LINEMODE:
-            ESP_LOGI(TAG, "Client WILL Terminal line mode");
+            ESP_LOGI(TAG, "< Client WILL Terminal line mode");
             break;
         case TELNET_OPT_X_DISPLAY_LOCATION:
-            ESP_LOGI(TAG, "Client WILL X Display location");
+            ESP_LOGI(TAG, "< Client WILL X Display location");
             break;
         case TELNET_OPT_ENVIRONMENT:
-            ESP_LOGI(TAG, "Client WILL Environment");
+            ESP_LOGI(TAG, "< Client WILL Environment");
             break;
         case TELNET_OPT_WINDOW_SIZE:
-            ESP_LOGI(TAG, "Client WILL Window size");
+            ESP_LOGI(TAG, "< Client WILL Window size");
             if (m_window_size_cb) {
+                ESP_LOGI(TAG, "> Server get window size");
                 write_command(TELNET_DO, TELNET_OPT_WINDOW_SIZE);
             }
             break;
         
         default:
-            ESP_LOGI(TAG, "Client WILL unknown %02x", value);
+            ESP_LOGI(TAG, "< Client WILL unknown %02x", value);
             break;
     }
 }
@@ -480,10 +488,17 @@ ssize_t TelnetConnection::read(uint8_t *buf, size_t count)
     uint8_t rbuf[count];
     auto rc = recv(m_fd, rbuf, count, 0);
     if (rc<0) {
-        ESP_LOGW(TAG, "Client read failed: errno=%d", errno);
+        if (errno==ENOTCONN) {
+            ESP_LOGI(TAG, "Client closed connection");
+        }
+        else {
+            ESP_LOGW(TAG, "Client read failed: errno=%d", errno);
+        }
         return -1;
     }
+    #ifdef DUMP_INPUT
     uint8_t *inb = buf;
+    #endif
     for (ssize_t i=0; i<rc; i++) {
         uint8_t ch = rbuf[i];
         if (m_iac) {
@@ -527,6 +542,7 @@ ssize_t TelnetConnection::read(uint8_t *buf, size_t count)
         }
     }
 
+    #ifdef DUMP_INPUT
     if (rsz>0) {
         printf("< ");
         for (uint i=0; i<rsz; i++) {
@@ -534,6 +550,7 @@ ssize_t TelnetConnection::read(uint8_t *buf, size_t count)
         }
         printf("\n");
     }
+    #endif
 
     return rsz;
 }

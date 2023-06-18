@@ -19,8 +19,8 @@ static constexpr const char* TAG = "serial";
 static constexpr int         SERIAL_RX_BUF_SIZE { 1024 };
 static constexpr int         SERIAL_DEFAULT_BAUD_RATE { 1500000 };
 
-static constexpr const char *SERIAL_NVS_NAMESPACE { "storage" };
-static constexpr const char *SERIAL_NVS_BAUD      { "serial_baud" };
+static constexpr const char *SERIAL_NVS_NAMESPACE { "serial" };
+static constexpr const char *SERIAL_NVS_BAUD      { "baud" };
 
 bool Serial::start()
 {
@@ -39,21 +39,14 @@ bool Serial::start()
         .source_clk = UART_SCLK_DEFAULT,
     };
 
+    // Load settings from NVS
     nvs_handle_t handle;
     auto err = nvs_open(SERIAL_NVS_NAMESPACE, NVS_READONLY, &handle);
-    if (err != ESP_OK) {
-        printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
-    } else {
-        printf("NVS Open\n");
-
+    if (err == ESP_OK) {
         uint32_t value = SERIAL_DEFAULT_BAUD_RATE;
         if (nvs_get_u32(handle, SERIAL_NVS_BAUD, &value)==ESP_OK) {
             uart_config.baud_rate = value;
         }
-        else {
-            ESP_LOGI(TAG, "Using default baud %u", SERIAL_DEFAULT_BAUD_RATE);
-        }
-
         nvs_close(handle);
     }
 
@@ -72,7 +65,7 @@ bool Serial::start()
         return false;
     }
     else {
-        ESP_LOGI(TAG, "Opened serial device %s", dev);
+        ESP_LOGI(TAG, "Opened serial device %s at %d", dev, uart_config.baud_rate);
     }
 
 
@@ -131,6 +124,8 @@ bool Serial::set_baud(uint32_t baud)
             return false;
         }
 
+        nvs_commit(handle);
+
         ESP_LOGI(TAG, "Baud rate set to %lu", baud);
         nvs_close(handle);
 
@@ -140,4 +135,18 @@ bool Serial::set_baud(uint32_t baud)
         ESP_LOGE(TAG, "Error setting baud rate to %lu: err=%d", baud, res);
         return false;
     }
+}
+
+
+bool Serial::restore()
+{
+    nvs_handle_t handle;
+    auto res = nvs_open(SERIAL_NVS_NAMESPACE, NVS_READWRITE, &handle);
+    if (res != ESP_OK) {
+        nvs_erase_all(handle);
+        nvs_commit(handle);
+        nvs_close(handle);
+    }
+    uart_set_baudrate(m_port, SERIAL_DEFAULT_BAUD_RATE);
+    return true;
 }

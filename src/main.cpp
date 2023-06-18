@@ -13,7 +13,7 @@
 #include "wifi.h"
 #include "telnet.h"
 #include "console.h"
-
+#include "globals.h"
 
 extern "C" {
     void app_main(void);
@@ -23,8 +23,8 @@ extern "C" {
 static constexpr const char *TAG = "main";
 
 
-static Serial serial(UART_NUM_1, GPIO_NUM_2, GPIO_NUM_3);
-static TelnetServer telnet_server(23);
+Serial g_serial(UART_NUM_1, GPIO_NUM_2, GPIO_NUM_3);
+TelnetServer g_telnet_server(23);
 
 static TelnetConnection telnet_client;
 
@@ -33,7 +33,7 @@ static void on_serial_data()
 {
     static uint8_t buf[64];
 
-    auto len = serial.read(buf, sizeof(buf));
+    auto len = g_serial.read(buf, sizeof(buf));
     if (len>0) {
         //ESP_LOGI(TAG, "SER %d read", len);
         if (telnet_client) {
@@ -52,8 +52,8 @@ static void on_telnet_client_data()
         return;
     }
     else if (len>0) {
-        ESP_LOGI(TAG, "TEL %d read", len);
-        serial.write(buf, len);
+        //ESP_LOGI(TAG, "TEL %d read", len);
+        g_serial.write(buf, len);
     }
 }
 
@@ -68,7 +68,7 @@ static void on_telnet_connection()
 {
     TelnetConnection client;
 
-    if (!telnet_server.accept(client))
+    if (!g_telnet_server.accept(client))
         return;
 
     if (telnet_client) {
@@ -80,7 +80,7 @@ static void on_telnet_connection()
         return;
     }
 
-    ESP_LOGW(TAG, "Client ok");
+    ESP_LOGW(TAG, "Client connected");
     telnet_client = client;
     telnet_client.set_window_size_cb(on_telnet_window_size);
 }
@@ -132,17 +132,17 @@ void app_main(void)
     esp_partition_iterator_release(it);
 
 
-    console_init();
-
-    while (!serial.start()) {
+    while (!g_serial.start()) {
         vTaskDelay(pdMS_TO_TICKS(2000));
         ESP_LOGW(TAG, "Retrying serial open");
     }
-    while (!telnet_server.start()) {
+    while (!g_telnet_server.start()) {
         vTaskDelay(pdMS_TO_TICKS(2000));
         ESP_LOGW(TAG, "Retrying telnet open");
     }
-    int max_fd = MAX(serial.fd(), telnet_server.fd());
+    int max_fd = MAX(g_serial.fd(), g_telnet_server.fd());
+
+    console_init();
 
     int s;
     fd_set rfds;
@@ -152,8 +152,8 @@ void app_main(void)
     };
     while (true) {
         FD_ZERO(&rfds);
-        FD_SET(serial.fd(), &rfds);
-        FD_SET(telnet_server.fd(), &rfds);
+        FD_SET(g_serial.fd(), &rfds);
+        FD_SET(g_telnet_server.fd(), &rfds);
         if (telnet_client) {
             FD_SET(telnet_client.fd(), &rfds);
         }
@@ -167,10 +167,10 @@ void app_main(void)
             //ESP_LOGI(TAG, "Timeout has been reached and nothing has been received");
         }
         else {
-            if (FD_ISSET(serial.fd(), &rfds)) {
+            if (FD_ISSET(g_serial.fd(), &rfds)) {
                 on_serial_data();
             }
-            if (FD_ISSET(telnet_server.fd(), &rfds)) {
+            if (FD_ISSET(g_telnet_server.fd(), &rfds)) {
                 on_telnet_connection();
             }
             if (FD_ISSET(telnet_client.fd(), &rfds)) {
@@ -180,7 +180,7 @@ void app_main(void)
         taskYIELD();
     }
 
-    telnet_server.stop();
-    serial.stop();
+    g_telnet_server.stop();
+    g_serial.stop();
 }
 

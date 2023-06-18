@@ -7,6 +7,7 @@
 #include <argtable3/argtable3.h>
 
 #include "wifi.h"
+#include "globals.h"
 
 static constexpr const char *TAG = "cmd";
 
@@ -14,6 +15,72 @@ static constexpr const char *TAG = "cmd";
 /** -------------------------------------------------------------------------------
  * Serial settings
  */
+
+static struct {
+    struct arg_int *baud;
+    struct arg_end *end;
+} set_baud_args;
+
+static int serial_set_baud_cmd(int argc, char **argv) {
+    int nerrors = arg_parse(argc, argv, (void **) &set_baud_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, set_baud_args.end, argv[0]);
+        return 1;
+    }
+
+    int baud = set_baud_args.baud->ival[0];
+    if (baud <=0) {
+        ESP_LOGE(TAG, "Invalid baud rate %d", baud);
+        return 1;
+    }
+
+    ESP_LOGI(TAG, "Set serial baud to %d", baud);
+
+    if (!g_serial.set_baud(baud)) {
+        ESP_LOGI(TAG, "Set serial baud failed");
+        return 1;
+    }
+
+    return 0;
+}
+
+static void register_serial_set_baud()
+{
+    set_baud_args.baud = arg_int1(nullptr, nullptr, "<baud>", "Serial baud rate");
+    set_baud_args.end = arg_end(2);
+
+    const esp_console_cmd_t cmd = {
+        .command = "serial_set_baud",
+        .help = "Set serial baud rate",
+        .hint = nullptr,
+        .func = serial_set_baud_cmd,
+        .argtable = &set_baud_args
+    };
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+}
+
+
+
+static int serial_restore_cmd(int argc, char **argv) {
+    if (!g_serial.restore()) {
+        ESP_LOGW(TAG, "Serial restore command failed");
+        return 1;
+    }
+    ESP_LOGI(TAG, "Serial settings reset to default");
+    return 0;
+}
+
+static void register_serial_restore()
+{
+    const esp_console_cmd_t cmd = {
+        .command = "serial_restore",
+        .help = "Restore serial settings to default",
+        .hint = nullptr,
+        .func = &serial_restore_cmd,
+        .argtable = nullptr,
+    };
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+}
 
 
 
@@ -120,7 +187,7 @@ static int wifi_restore_cmd(int argc, char **argv) {
         ESP_LOGW(TAG, "WiFi restore command failed");
         return 1;
     }
-
+    ESP_LOGI(TAG, "WiFi settings reset to default");
     return 0;
 }
 
@@ -164,21 +231,16 @@ static void register_wifi_info()
 
 
 
-static void register_wifi(void)
-{
-    register_wifi_join();
-    register_wifi_set_country();
-    register_wifi_restore();
-    register_wifi_info();
-}
-
-
-
 /** -------------------------------------------------------------------------------
  * Wifi commands
  */
 
 void register_cmd()
 {
-    register_wifi();
+    register_wifi_join();
+    register_wifi_set_country();
+    register_wifi_restore();
+    register_wifi_info();
+    register_serial_set_baud();
+    register_serial_restore();
 }

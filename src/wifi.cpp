@@ -155,6 +155,10 @@ bool wifi_join(const char *ssid, const char *password, uint timeout_ms)
     esp_wifi_get_config(WIFI_IF_STA, &wifi_config);
 
     wifi_sta_config_t &sta = wifi_config.sta;
+    sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+    sta.pmf_cfg.capable = true;
+    sta.pmf_cfg.required = false;
+
 
     sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
     strlcpy((char *)sta.ssid, ssid, sizeof(sta.ssid));
